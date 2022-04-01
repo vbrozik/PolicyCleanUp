@@ -20,6 +20,7 @@ August 2018
 
 """
 
+
 from __future__ import print_function
 
 import argparse
@@ -48,7 +49,7 @@ DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 DATETIME_NOW_STR = datetime.datetime.fromtimestamp(DATETIME_NOW_SEC).strftime(DATETIME_FORMAT)
 
 # Default log file name
-DEFAULT_OUTPUT_FILE_NAME = "policyCleanUp-{}.json".format(DATETIME_NOW_SEC)
+DEFAULT_OUTPUT_FILE_NAME = f"policyCleanUp-{DATETIME_NOW_SEC}.json"
 
 # Global domain name
 GLOBAL_DOMAIN_NAME = 'Global'
@@ -183,10 +184,10 @@ def updateGlobalThreshold(args):
 
 # checks if user inserted details session
 def is_default_session_details(session_name, session_description):
-    if session_name == "Policy_clean_up_tool":
-        if session_description == DATETIME_NOW_STR:
-            return True
-    return False
+    return (
+        session_name == "Policy_clean_up_tool"
+        and session_description == DATETIME_NOW_STR
+    )
 
 
 # Get global threshold
@@ -194,11 +195,10 @@ def get_global_thresholds():
     global DEFAULT_DISABLE_THRESHOLD
     global DEFAULT_DELETE_THRESHOLD
 
-    global_thresholds = {}
-    global_thresholds['disable'] = DEFAULT_DISABLE_THRESHOLD
-    global_thresholds['delete'] = DEFAULT_DELETE_THRESHOLD
-
-    return global_thresholds
+    return {
+        'disable': DEFAULT_DISABLE_THRESHOLD,
+        'delete': DEFAULT_DELETE_THRESHOLD,
+    }
 
 
 # Get list of all the packages information that we should run on. If the user not specify package name - run over all existing packages
@@ -221,7 +221,11 @@ def packages_to_run(user_package, client):
 
     else:
         show_package_res = client.api_call("show-package", {"name": user_package, "details-level": "full"})
-        exit_failure("Failed to get policy {} information.".format(user_package), show_package_res)
+        exit_failure(
+            f"Failed to get policy {user_package} information.",
+            show_package_res,
+        )
+
 
         packages_to_run.append(show_package_res.data)
 
@@ -237,24 +241,20 @@ def get_rule_final_threshold(rule, field, threshold_type, global_thresholds):
     # -1 represents a rule that should be skipped all time.
     if global_thresholds.get(threshold_type) == -1:
         return None
-    # Empty value - use global threshold
     elif not local_threshold:
         return global_thresholds.get(threshold_type)
-    # Don't touch override
     elif local_threshold == "-1":
         return None
-    # Non-numeric value - skip rule
     elif local_threshold.isnumeric() is False:
-        rule['skipped-reason'] = "{} threshold has non-numeric value".format(threshold_type)
+        rule['skipped-reason'] = f"{threshold_type} threshold has non-numeric value"
         return None
     else:
         int_local_threshold = int(local_threshold)
 
         # Negative value - skip rule
         if int_local_threshold < 1:
-            rule['skipped-reason'] = "{} threshold is a negative number".format(threshold_type)
+            rule['skipped-reason'] = f"{threshold_type} threshold is a negative number"
             return None
-        # Positive numeric value - use it as override
         else:
             return int_local_threshold
 
@@ -315,13 +315,7 @@ def valid_packages_targets(packages, client):
     exit_failure("Failed to get gateways & servers information.", show_gateways_servers_res)
 
     # Object to store all valid targets as dictionary from packages
-    valid_targets = {}
-
-    # True if all the package targets are valid
-    valid_targets['all-targets-valid'] = True
-
-    # Store dictionary from packages name to (dictionary of valid targets uid to valid targets)
-    valid_targets['packages-targets'] = {}
+    valid_targets = {'all-targets-valid': True, 'packages-targets': {}}
 
     for object in show_gateways_servers_res.data:
 
@@ -347,10 +341,7 @@ def valid_packages_targets(packages, client):
 # Check if a package target is valid
 def is_valid_package_target(packages, target, client):
     # Set of packages names
-    packages_names_dict = {}
-    for package in packages:
-        packages_names_dict[package.get('name')] = package
-
+    packages_names_dict = {package.get('name'): package for package in packages}
     policy_name = target.get('policy', {}).get('access-policy-name')
 
     return (policy_name in packages_names_dict) and is_access_policy_installed(target) and is_installation_updated(
@@ -375,9 +366,7 @@ def add_valid_target(packages_targets, valid_target):
     target_policy = packages_targets.get(target_policy_name)
 
     if not target_policy:
-        target_policy = {}
-        # Flag that save if al the targets are valid
-        target_policy['all-targets-valid'] = True
+        target_policy = {'all-targets-valid': True}
         # save the minimal installation time of the policy - to check if rule has modified in validate_rule
         target_policy['minimal-installation-time'] = convert_date_object_to_datetime(
             valid_target.get('policy').get('access-policy-installation-date', {}))
@@ -424,7 +413,10 @@ def is_target_hitcount_on(target, client):
     ##### When you have the option, always prefer to use the documented APIs and not the generic APIs #####
     show_generic_object_res = client.api_call("show-generic-object",
                                               {"uid": target.get('uid'), "details-level": "full"})
-    if is_failure("Failed to get {} target information".format(target.get('name')), show_generic_object_res):
+    if is_failure(
+        f"Failed to get {target.get('name')} target information",
+        show_generic_object_res,
+    ):
         return False
 
     # Check if hit count flag in on
@@ -464,20 +456,16 @@ def show_access_rulebase(layer, client):
 # The use of the command 'api_call' in this function is because we want to get the data of rulebase and objects-dictionary at once.
 def api_call_command_with_objects_dictionary(client, command, details_level="standard", container_keys=["objects"],
                                              payload=None):
-    limit = 500  # each time get no more than 500 objects
-    finished = False  # will become true after getting all the data
-    all_objects = {}  # accumulate all the objects from all the API calls
-
     iterations = 0  # number of times we've made an API call
     if payload is None:
         payload = {}
 
-    for key in container_keys:
-        all_objects[key] = []
-
+    all_objects = {key: [] for key in container_keys}
     # accumulate all the objects-dictionary from all the API calls
     all_objects["objects-dictionary"] = {}
 
+    limit = 500
+    finished = False
     # are we done?
     while not finished:
 
@@ -515,14 +503,12 @@ def add_and_parse_object_dictionary_to_map(object_dictionary, object_dictionary_
 
 # Get full rule-base as a list of rules
 def get_rulebase(show_rulebase_res):
-    rulebase = conceal_sections(show_rulebase_res.get('rulebase'))
-    return rulebase
+    return conceal_sections(show_rulebase_res.get('rulebase'))
 
 
 # Get object-dictionary from show access-rulebase as a map
 def get_object_dictionary(show_rulebase_res):
-    object_dictionary = show_rulebase_res.get('objects-dictionary')
-    return object_dictionary
+    return show_rulebase_res.get('objects-dictionary')
 
 
 # Get rule last hit time
@@ -562,18 +548,21 @@ def write_plan_json(plan, file):
 
 # Build the structure of the plan output - keep specific keys, add 'skipped', add summary
 def build_output_structure(plan, summary, operation):
-    new_plan = {}
     summary['total-candidate-disable-rules'] = 0
     summary['total-candidate-delete-rules'] = 0
     summary['total-skipped-packages'] = 0
     summary['total-skipped-layers'] = 0
     summary['total-skipped-rules'] = 0
 
-    new_plan['operation'] = operation
-    new_plan['thresholds'] = {"delete-after": get_global_thresholds().get("delete"),
-                              "disable-after": get_global_thresholds().get("disable")}
-    new_plan['packages'] = []
-    new_plan['skipped-packages'] = []
+    new_plan = {
+        'operation': operation,
+        'thresholds': {
+            "delete-after": get_global_thresholds().get("delete"),
+            "disable-after": get_global_thresholds().get("disable"),
+        },
+        'packages': [],
+        'skipped-packages': [],
+    }
 
     # Keys to save
     keep_package_keys = ['uid', 'name', 'type']
@@ -653,16 +642,9 @@ def print_summary(summary):
 
 def get_appropriate_wording_by_total_number(total_num, word_to_change, is_present):
     if total_num == 1:
-        if is_present is True:
-            word_to_change += " is"
-        else:
-            word_to_change += " was"
+        word_to_change += " is" if is_present is True else " was"
     else:
-        if is_present is True:
-            word_to_change += "s are"
-        else:
-            word_to_change += "s were"
-
+        word_to_change += "s are" if is_present is True else "s were"
     return word_to_change
 
 
@@ -684,11 +666,11 @@ def conceal_sections(rulebase):
 # Apply the plan results
 def apply_plan(client, plan):
     for package in get_value_by_key_with_validation(plan, 'packages'):
-        print_msg("Package {}".format(package['name']))
+        print_msg(f"Package {package['name']}")
 
         for layer in get_value_by_key_with_validation(package, 'access-layers'):
 
-            print_msg("  Layer {}".format(layer['name']))
+            print_msg(f"  Layer {layer['name']}")
 
             for rule in get_value_by_key_with_validation(get_value_by_key_with_validation(layer, 'disable-rules'),
                                                          'rules'):
@@ -755,29 +737,33 @@ def disable_rule(rule, layer, api_client):
                                         "comments": rule[
                                                         'comments'] + " -This rule changed automatically by the policyCleanUp tool"})
 
-    return not is_failure("    Failed to set rule No.{} with UID {}.".format(rule['rule-number'], rule['uid']),
-                          set_rule_res)
+    return not is_failure(
+        f"    Failed to set rule No.{rule['rule-number']} with UID {rule['uid']}.",
+        set_rule_res,
+    )
 
 
 # delete the rule
 def delete_rule(rule, layer, api_client):
     delete_rule_res = api_client.api_call("delete-access-rule", {"uid": rule['uid'], "layer": layer['uid']})
-    return not is_failure("    Failed to delete rule No.{} with UID {}.".format(rule['rule-number'], rule['uid']),
-                          delete_rule_res)
+    return not is_failure(
+        f"    Failed to delete rule No.{rule['rule-number']} with UID {rule['uid']}.",
+        delete_rule_res,
+    )
 
 
 # Determine which layers should be skipped
 def validate_layer(layer):
-    if is_global_object(layer) is True:
-        return False
-
-    return True
+    return is_global_object(layer) is not True
 
 
 def get_groups(client):
     response = client.api_query(command="show-groups", details_level="uid")
     if response.success is False:
-        print_msg("Failed to get groups. Error: {}".format(response.error_message.encode('utf-8')))
+        print_msg(
+            f"Failed to get groups. Error: {response.error_message.encode('utf-8')}"
+        )
+
         return
     return set(response.data)
 
@@ -792,7 +778,10 @@ def is_target_valid_group(target_uid, valid_targets, client, groups):
 
     response = client.api_call(command="show-group", payload={"uid": target_uid})
     if response.success is False:
-        print_msg("Failed to get group with UID {}. Error: {}".format(target_uid, response.error_message.encode('utf-8')))
+        print_msg(
+            f"Failed to get group with UID {target_uid}. Error: {response.error_message.encode('utf-8')}"
+        )
+
         return False
 
     members = response.data.get("members")
@@ -800,10 +789,7 @@ def is_target_valid_group(target_uid, valid_targets, client, groups):
         # group has no members
         return False
 
-    for member in members:
-        if member.get("uid") not in valid_targets:
-            return False
-    return True
+    return all(member.get("uid") in valid_targets for member in members)
 
 
 # Check if the install-on list contains invalid target & rule is updated on targets
@@ -825,17 +811,20 @@ def validate_rule(rule, package, valid_targets, client, groups):
     if install_on[0] == INSTALL_ON_ALL_TARGETS:
         if package_valid_targets.get('all-targets-valid') is True:
             return True
-        else:
-            rule['skipped-reason'] = "one of the targets in the install-on list is invalid"
-            return False
+        rule['skipped-reason'] = "one of the targets in the install-on list is invalid"
+        return False
 
     valid_targets = package_valid_targets.get('targets', {})
 
     for target_uid in install_on:
-        if target_uid not in valid_targets:
-            if not is_target_valid_group(target_uid, valid_targets, client, groups):
-                rule['skipped-reason'] = "target with UID {} in the install-on list is invalid".format(target_uid)
-                return False
+        if target_uid not in valid_targets and not is_target_valid_group(
+            target_uid, valid_targets, client, groups
+        ):
+            rule[
+                'skipped-reason'
+            ] = f"target with UID {target_uid} in the install-on list is invalid"
+
+            return False
 
     return True
 
@@ -855,11 +844,13 @@ def mgmt_hitcount_on(client, domain):
     # Loop over all global properties, and search for current domain hit count flag
     for obj in show_prop_res.data.get('objects'):
         if (obj['domain']['name'] == domain_name):
-            if obj.get('enableHitCount') == 0:
-                print_msg("Hit Count flag is off for domain {}, please turn it on.".format(domain['name']))
-                exit(0)
-            else:
+            if obj.get('enableHitCount') != 0:
                 return True
+            print_msg(
+                f"Hit Count flag is off for domain {domain['name']}, please turn it on."
+            )
+
+            exit(0)
 
 
 # get list of all objects from objects dictionary that appear in rule only by uid
@@ -892,12 +883,7 @@ def add_to_sub_dictionary(objects_of_rule_to_add, sub_dictionary):
 
 # parse map of sub objects dictionary to list of values
 def parse_sub_objects_dictionary_map_to_list_of_value(sub_dictionary):
-    list_values_of_sub_objects_dictionary = []
-
-    for value in sub_dictionary.values():
-        list_values_of_sub_objects_dictionary.append(value)
-
-    return list_values_of_sub_objects_dictionary
+    return list(sub_dictionary.values())
 
 
 # Determine in which conditions the rule should be disabled
@@ -962,7 +948,7 @@ def is_plan(args):
 
 # Determine in which operations the tool should disable/delete rules (apply, apply_without_publish)
 def is_apply_operation(operation):
-    return (operation == "apply") or (operation == "apply_without_publish")
+    return operation in ["apply", "apply_without_publish"]
 
 
 # Determine in which operations the tool should publish changes (apply)
@@ -972,10 +958,12 @@ def is_publish_operation(operation):
 
 # Check if the API-call failed & skipped reason message
 def skip_failure(skipped_object, error_msg, response):
-    if (hasattr(response, 'success')):
-        if response.success is False:
-            skipped_object['skipped-reason'] = error_msg + " Error: {}".format(response.error_message.encode('utf-8'))
-            return True
+    if (hasattr(response, 'success')) and response.success is False:
+        skipped_object['skipped-reason'] = (
+            error_msg + f" Error: {response.error_message.encode('utf-8')}"
+        )
+
+        return True
 
     return False
 
@@ -983,7 +971,7 @@ def skip_failure(skipped_object, error_msg, response):
 # Check if the API-call failed & print error message
 def is_failure(error_msg, response):
     if response.success is False:
-        print_msg(error_msg + " Error: {}".format(response.error_message.encode('utf-8')))
+        print_msg(error_msg + f" Error: {response.error_message.encode('utf-8')}")
         return True
 
     return False
@@ -992,22 +980,25 @@ def is_failure(error_msg, response):
 # Check if running on MDS and didn't supply domain
 def check_validation_for_mds(client, domain):
     api_res = client.api_call("show-mdss")
-    if api_res.success and int(api_res.data.get('total')) != 0:
-        if domain is None:
-            print_msg(" Error: You must provide a domain in a Multi-Domain-Management environment.")
-            exit(1)
+    if (
+        api_res.success
+        and int(api_res.data.get('total')) != 0
+        and domain is None
+    ):
+        print_msg(" Error: You must provide a domain in a Multi-Domain-Management environment.")
+        exit(1)
 
 
 # Exit if the API-call failed & print error message
 def exit_failure(error_msg, response):
     if response.success is False:
-        print_msg(error_msg + " Error: {}".format(response.error_message))
+        print_msg(error_msg + f" Error: {response.error_message}")
         exit(1)
 
 
 # Print message with time description
 def print_msg(msg):
-    print("[{}] {}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), msg))
+    print(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {msg}')
 
 
 # Default value for non-json serializable objects
@@ -1067,12 +1058,12 @@ def main():
                 if validate_package(package, valid_targets) is False:
                     continue
 
-                print_msg("Package {}".format(package['name']))
+                print_msg(f"Package {package['name']}")
 
                 # Loop over policy layers
                 for layer in package.get('access-layers'):
 
-                    print_msg("  Layer {}".format(layer['name']))
+                    print_msg(f"  Layer {layer['name']}")
 
                     # Skip invalid layers (global layers)
                     if validate_layer(layer) is False:
@@ -1112,16 +1103,13 @@ def main():
                                 # Add to plan that the rule should be disabled
                                 layer['disable-rules'].append(rule)
 
-                        # Rule is disabled
-                        else:
-                            # check if the rule should be deleted - disabled too long
-                            if rule_should_be_deleted(rule, global_thresholds) is True:
-                                objects_of_rule_to_add = get_objects_of_rule_from_objects_dictionary(rule,
-                                                                                                     object_dictionary_as_map)
-                                sub_dictionary = add_to_sub_dictionary(objects_of_rule_to_add, sub_dictionary)
+                        elif rule_should_be_deleted(rule, global_thresholds) is True:
+                            objects_of_rule_to_add = get_objects_of_rule_from_objects_dictionary(rule,
+                                                                                                 object_dictionary_as_map)
+                            sub_dictionary = add_to_sub_dictionary(objects_of_rule_to_add, sub_dictionary)
 
-                                # Add to plan that the rule should be deleted
-                                layer['delete-rules'].append(rule)
+                            # Add to plan that the rule should be deleted
+                            layer['delete-rules'].append(rule)
 
                     layer['objects-dictionary'] = parse_sub_objects_dictionary_map_to_list_of_value(sub_dictionary)
 
@@ -1135,9 +1123,8 @@ def main():
             write_plan_json(plan, user_args.output_file)
 
             print_msg('Plan process has finished.\n')
-            print_msg('The output file in: {}'.format(os.path.abspath(user_args.output_file)))
+            print_msg(f'The output file in: {os.path.abspath(user_args.output_file)}')
 
-        # Get plan-file path as argument
         else:
             plan = read_plan_json(user_args.import_plan_file)
 
