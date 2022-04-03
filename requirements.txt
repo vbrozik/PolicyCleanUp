@@ -1,0 +1,1 @@
+cpapi @ https://github.com/CheckPointSW/cp_mgmt_api_python_sdk/archive/refs/tags/v1.3.0.zip
