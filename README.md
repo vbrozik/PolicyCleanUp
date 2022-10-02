@@ -1,4 +1,4 @@
-# Note about this clone of the repository
+# Note about this fork of the repository
 This fork was created to clean the code up. Because of lack of interest it will be archived soon and later probably deleted.
 
 # PolicyCleanUp
