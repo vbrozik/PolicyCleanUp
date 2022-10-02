@@ -1,3 +1,6 @@
+# Note about this clone of the repository
+This fork was created to clean the code up. Because of lack of interest it will be archived soon and later probably deleted.
+
 # PolicyCleanUp
 Check Point PolicyCleanUp tool allows automatic cleanup of your policy based on hits count. The tool runs on a policy 
 and a domain that you named.
